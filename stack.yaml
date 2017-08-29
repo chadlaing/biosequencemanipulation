@@ -6,6 +6,10 @@ resolver: lts-7.13
 # Local packages, usually specified by relative directory name
 packages:
 - '.'
+- location:
+      git: https://github.com/BioHaskell/biofasta.git
+      commit: e90d95cc6377c53233548ecd8a58ba66a52f4cd1
+  extra-dep: true
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps: []

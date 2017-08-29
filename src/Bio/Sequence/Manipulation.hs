@@ -1,33 +1,63 @@
 {-|
-Module      : Bio.Sequence.ReverseComplement
-Description : Functions for reverse complementing Bio.Core.Sequence data
-                as implemented in Bio.Sequence.Fasta (https://github.com/BioHaskell/biofasta)
+Module      : Bio.Sequence.Manipulation
+Description : Functions for manipulating Bio.Core.Sequence data
 Copyright   : (c) Chad R Laing, 2017
 License     : GPL-3
 Maintainer  : chadlaing@inoutbox.com
 Stability   : stable
 Portability : POSIX
 
-This module takes a Haskell-only approach to reverse complement a sequence
-  that is clear, rather than an approach from the Benchmark Game. It provides
+This module takes a Haskell-only approach to sequence manipulation
+  that is clear, and builds on the Bio.Core.Sequence classes. It
   functions for Bio.Core.SeqData, Bio.Core.QualData, and Sequence as
   implemented in <https://github.com/BioHaskell/biofasta Bio.Sequence.Fasta>
 -}
 
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 
-module Bio.Sequence.ReverseComplement (
+module Bio.Sequence.Manipulation (
   -- * Functions
-  revCompSequence,
+  --revCompSequence,
   revCompSeqData,
   revQualData
   ) where
 
 import Protolude
-import Bio.Core.Sequence (unSD, unQD, SeqData(..), QualData(..))
-import Bio.Sequence.Fasta (readFasta, toStr, Sequence(..))
+import Bio.Core.Sequence (unSD, unQD, SeqData(..), QualData(..), SeqLabel(..), Offset(..), BioSeq(..), seqdata, seqlabel, seqid, seqlength)
+--import Bio.Sequence.Fasta (readFasta, toStr, Sequence(..))
 import Data.Char
 import Data.ByteString.Lazy.Char8 as B
+
+
+data Alphabet = AminoAcid | Nucleotide
+                deriving (Eq, Show)
+
+data FastaSeq =
+  FastaSeq{
+      aSeqData :: SeqData
+    , aSeqLabel :: SeqLabel
+    , aSeqAlpha :: Alphabet
+  } deriving (Eq, Show)
+
+data FastqSeq =
+  FastqSeq{
+      qSeqData :: SeqData
+    , qSeqLabel :: SeqLabel
+    , qSeqAlpha :: Alphabet
+    , qQualData :: QualData
+  } deriving (Eq, Show)
+
+
+data Sequence = Fasta FastaSeq | Fastq FastqSeq
+                deriving (Eq, Show)
+
+instance BioSeq FastaSeq where
+  seqid = SeqLabel . B.takeWhile (/= ' ') . unSL . aSeqLabel
+  seqheader = aSeqLabel
+  seqdata = aSeqData
+  seqlength = Offset .  B.length . unSD . aSeqData
+
 
 -- |Complements the nucleotide base, including ambiguous characters. This
 -- function is not exported.
@@ -76,13 +106,13 @@ compChar c = case c of
 --
 -- > Seq (SeqLabel {unSL = "test"}) (SeqData {unSD = "CGGCAT"}) (Just (QualData {unQD = "@::::("}))
 --
-revCompSequence :: Sequence -> Sequence
-revCompSequence (Seq l s q) = Seq l newSeq newQual
-  where
-    newSeq = revCompSeqData s
-    newQual = case q of
-      Nothing -> Nothing
-      Just x -> Just $ revQualData x
+--revCompSequence :: Sequence -> Sequence
+--revCompSequence (Seq l s q) = Seq l newSeq newQual
+--  where
+--    newSeq = revCompSeqData s
+--    newQual = case q of
+--      Nothing -> Nothing
+--      Just x -> Just $ revQualData x
 
 
 -- | The reverse complement function for 'Bio.Core.SeqData'
@@ -115,3 +145,25 @@ revComp' :: B.ByteString
          -> Char
          -> B.ByteString
 revComp' s c = B.cons (compChar c) s
+
+
+revCompSequence :: Sequence -> Sequence
+revCompSequence s = case s of
+  Fasta x -> if aSeqAlpha x == Nucleotide
+                then Fasta x{aSeqData = revCompSeqData . seqdata $ x}
+                else Fasta x
+  Fastq x -> x{}
+
+
+
+defaultFasta :: Sequence
+defaultFasta = Fasta FastaSeq
+                        {aSeqData = SeqData "ATCG"
+                        ,aSeqLabel = SeqLabel "test"
+                        ,aSeqAlpha = AminoAcid
+                        }
+
+--
+-- aSeqData :: SeqData
+--    , aSeqLabel :: SeqLabel
+--    , aSeqAlpha :: Alphabet
