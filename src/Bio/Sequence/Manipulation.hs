@@ -15,6 +15,8 @@ This module takes a Haskell-only approach to sequence manipulation
 
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE StandaloneDeriving #-}
 
 module Bio.Sequence.Manipulation (
   -- * Functions
@@ -23,34 +25,47 @@ module Bio.Sequence.Manipulation (
   revQualData
   ) where
 
+
 import Protolude
 import Bio.Core.Sequence (unSD, unQD, SeqData(..), QualData(..), SeqLabel(..), Offset(..), BioSeq(..), seqdata, seqlabel, seqid, seqlength)
---import Bio.Sequence.Fasta (readFasta, toStr, Sequence(..))
 import Data.Char
 import Data.ByteString.Lazy.Char8 as B
 
 
-data Alphabet = AminoAcid | Nucleotide
-                deriving (Eq, Show)
+data Sequence a where
+  Nucl :: Fast a -> Sequence Fast
+  Amino :: Fast a -> Sequence Fast
+deriving instance Show (Sequence a)
+
+
+data Fast a where
+  FastA :: FastaSeq -> Fast FastaSeq
+  FastQ :: FastqSeq -> Fast FastqSeq
+deriving instance Show (Fast a)
+
 
 data FastaSeq =
   FastaSeq{
       aSeqData :: SeqData
     , aSeqLabel :: SeqLabel
-    , aSeqAlpha :: Alphabet
   } deriving (Eq, Show)
+
 
 data FastqSeq =
   FastqSeq{
       qSeqData :: SeqData
     , qSeqLabel :: SeqLabel
-    , qSeqAlpha :: Alphabet
     , qQualData :: QualData
   } deriving (Eq, Show)
 
 
-data Sequence = Fasta FastaSeq | Fastq FastqSeq
-                deriving (Eq, Show)
+defaultFasta :: Sequence Fast
+defaultFasta = Nucl . FastA $ FastaSeq
+                                {aSeqData = SeqData "ATCG"
+                                ,aSeqLabel = SeqLabel "test"
+                                }
+
+
 
 instance BioSeq FastaSeq where
   seqid = SeqLabel . B.takeWhile (/= ' ') . unSL . aSeqLabel
@@ -146,24 +161,3 @@ revComp' :: B.ByteString
          -> B.ByteString
 revComp' s c = B.cons (compChar c) s
 
-
-revCompSequence :: Sequence -> Sequence
-revCompSequence s = case s of
-  Fasta x -> if aSeqAlpha x == Nucleotide
-                then Fasta x{aSeqData = revCompSeqData . seqdata $ x}
-                else Fasta x
-  Fastq x -> x{}
-
-
-
-defaultFasta :: Sequence
-defaultFasta = Fasta FastaSeq
-                        {aSeqData = SeqData "ATCG"
-                        ,aSeqLabel = SeqLabel "test"
-                        ,aSeqAlpha = AminoAcid
-                        }
-
---
--- aSeqData :: SeqData
---    , aSeqLabel :: SeqLabel
---    , aSeqAlpha :: Alphabet
