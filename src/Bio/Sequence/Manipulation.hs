@@ -4,13 +4,15 @@ Description : Functions for manipulating Bio.Core.Sequence data
 Copyright   : (c) Chad R Laing, 2017
 License     : GPL-3
 Maintainer  : chadlaing@inoutbox.com
-Stability   : stable
+Stability   : beta
 Portability : POSIX
 
 This module takes a Haskell-only approach to sequence manipulation
   that is clear, and builds on the Bio.Core.Sequence classes. It
-  functions for Bio.Core.SeqData, Bio.Core.QualData, and Sequence as
-  implemented in <https://github.com/BioHaskell/biofasta Bio.Sequence.Fasta>
+  functions for Bio.Core.SeqData, Bio.Core.QualData. The module provides a
+  Sequence Type that includes Amino / Nucl options for both FastA and FastQ
+  data. It is to be used as a basis for future Bio.* modules dealing with
+  sequence representation.
 -}
 
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -18,60 +20,76 @@ This module takes a Haskell-only approach to sequence manipulation
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE StandaloneDeriving #-}
 
-module Bio.Sequence.Manipulation (
-  -- * Functions
-  --revCompSequence,
-  revCompSeqData,
-  revQualData
-  ) where
+module Bio.Sequence.Manipulation where
 
 
 import Protolude
-import Bio.Core.Sequence (unSD, unQD, SeqData(..), QualData(..), SeqLabel(..), Offset(..), BioSeq(..), seqdata, seqlabel, seqid, seqlength)
+import Bio.Core.Sequence (unSD, unQD, SeqData(..), QualData(..), SeqLabel(..), BioSeqQual(..), Offset(..), BioSeq(..), seqdata, seqlabel, seqid, seqlength, seqqual, toFastQ, toFasta)
 import Data.Char
 import Data.ByteString.Lazy.Char8 as B
 
-
+-- |The Type for creating either nucleotide or amino acid based sequences
 data Sequence a where
-  Nucl :: Fast a -> Sequence Fast
-  Amino :: Fast a -> Sequence Fast
+  Nucl :: FastSeq -> Sequence FastSeq
+  Amino :: FastSeq -> Sequence FastSeq
 deriving instance Show (Sequence a)
 
 
-data Fast a where
-  FastA :: FastaSeq -> Fast FastaSeq
-  FastQ :: FastqSeq -> Fast FastqSeq
-deriving instance Show (Fast a)
+-- | The Type for creating FastA or FastQ sequences. FastQ includes the
+-- QualData for the sequence.
+data FastSeq = FastA FastASeq | FastQ FastQSeq
+               deriving (Eq, Show)
 
 
-data FastaSeq =
-  FastaSeq{
+-- | FastA data representation
+data FastASeq =
+  FastASeq{
       aSeqData :: SeqData
     , aSeqLabel :: SeqLabel
   } deriving (Eq, Show)
 
 
-data FastqSeq =
-  FastqSeq{
+-- | FastQ data representation
+data FastQSeq =
+  FastQSeq{
       qSeqData :: SeqData
     , qSeqLabel :: SeqLabel
     , qQualData :: QualData
   } deriving (Eq, Show)
 
 
-defaultFasta :: Sequence Fast
-defaultFasta = Nucl . FastA $ FastaSeq
-                                {aSeqData = SeqData "ATCG"
-                                ,aSeqLabel = SeqLabel "test"
-                                }
-
-
-
-instance BioSeq FastaSeq where
+-- | Implementation of Bio.Core.BioSeq for FastA data
+instance BioSeq FastASeq where
   seqid = SeqLabel . B.takeWhile (/= ' ') . unSL . aSeqLabel
   seqheader = aSeqLabel
   seqdata = aSeqData
   seqlength = Offset .  B.length . unSD . aSeqData
+
+
+-- | Implementation of Bio.Core.BioSeq for FastQ data
+instance BioSeq FastQSeq where
+  seqid = SeqLabel . B.takeWhile (/= ' ') . unSL . qSeqLabel
+  seqheader = qSeqLabel
+  seqdata = qSeqData
+  seqlength = Offset . B.length . unSD . qSeqData
+
+
+-- | Implementation of Bio.Core.BioSeqQual for FastQ data
+instance BioSeqQual FastQSeq where
+  seqqual = qQualData
+
+
+-- |Reverse complements any Sequence. For amino acid sequences, reverse
+-- complement does not make sense, so it returns the original sequence.
+-- For nucleotide sequences, both FastA and FastQ get the sequence reverse
+-- complemented, while FastQ additionally has the quality string reversed.
+revCompSequence :: Sequence a -> Sequence a
+revCompSequence x@(Amino _) = x
+revCompSequence (Nucl (FastA s)) =
+  Nucl . FastA $ s{aSeqData = revCompSeqData . seqdata $ s}
+revCompSequence (Nucl (FastQ s)) =
+  Nucl . FastQ $ s{qSeqData = revCompSeqData $ seqdata s
+                  ,qQualData = revQualData . seqqual $ s}
 
 
 -- |Complements the nucleotide base, including ambiguous characters. This
@@ -105,29 +123,6 @@ compChar c = case c of
   'B' -> 'V'
   'b' -> 'V'
   x -> x
-
--- | The reverse complement function for 'Bio.Fasta.Sequence' data. As quality
--- is an optional component of 'Bio.Fasta.Sequence', reverse the quality data
--- so that it matches the reverse complemented sequence. Uses a strict left
--- fold for the data accumulation. 'Sequence' as implemented
--- in <https://github.com/BioHaskell/biofasta Bio.Fasta.Sequence> is as follows:
---
--- > data Sequence = Seq SeqLabel SeqData (Maybe QualData)
--- >      deriving (Show, Eq)
--- For Example:
---
--- > revCompSequence $ Seq (SeqLabel "test") (SeqData "ATGCCG") (Just $ QualData "(::::@")
--- Gives:
---
--- > Seq (SeqLabel {unSL = "test"}) (SeqData {unSD = "CGGCAT"}) (Just (QualData {unQD = "@::::("}))
---
---revCompSequence :: Sequence -> Sequence
---revCompSequence (Seq l s q) = Seq l newSeq newQual
---  where
---    newSeq = revCompSeqData s
---    newQual = case q of
---      Nothing -> Nothing
---      Just x -> Just $ revQualData x
 
 
 -- | The reverse complement function for 'Bio.Core.SeqData'
