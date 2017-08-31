@@ -24,8 +24,8 @@ module Bio.Sequence.Manipulation where
 
 
 import Protolude
-import Bio.Core.Sequence (unSD, unQD, SeqData(..), QualData(..), SeqLabel(..), BioSeqQual(..), Offset(..), BioSeq(..), seqdata, seqlabel, seqid, seqlength, seqqual, toFastQ, toFasta)
-import Data.Char
+import Bio.Core.Sequence
+--import Data.Char
 import Data.ByteString.Lazy.Char8 as B
 
 -- |The Type for creating either nucleotide or amino acid based sequences
@@ -33,6 +33,7 @@ data Sequence a where
   Nucl :: FastSeq -> Sequence FastSeq
   Amino :: FastSeq -> Sequence FastSeq
 deriving instance Show (Sequence a)
+deriving instance Eq (Sequence a)
 
 
 -- | The Type for creating FastA or FastQ sequences. FastQ includes the
@@ -41,9 +42,10 @@ data FastSeq = FastA FastASeq | FastQ FastQSeq
                deriving (Eq, Show)
 
 
+type NuclFastA = FastASeq
 -- | FastA data representation
 data FastASeq =
-  FastASeq{
+  MkFastASeq{
       aSeqData :: SeqData
     , aSeqLabel :: SeqLabel
   } deriving (Eq, Show)
@@ -51,7 +53,7 @@ data FastASeq =
 
 -- | FastQ data representation
 data FastQSeq =
-  FastQSeq{
+  MkFastQSeq{
       qSeqData :: SeqData
     , qSeqLabel :: SeqLabel
     , qQualData :: QualData
@@ -134,10 +136,15 @@ compChar c = case c of
 --
 -- > SeqData {unSD = "CGGCAT"}
 revCompSeqData :: SeqData -> SeqData
-revCompSeqData (SeqData s) = SeqData $ B.foldl' revComp' B.empty s
+revCompSeqData (SeqData s) = SeqData $ B.foldl' addCompChar B.empty s
 
 
--- | The reverse function for 'Bio.Core.QualData'
+-- |The reverse complement function for FastASeq data
+revCompFastASeq :: FastASeq -> FastASeq
+revCompFastASeq x= x{aSeqData = revCompSeqData $ seqdata x}
+
+
+-- |The reverse function for 'Bio.Core.QualData'
 --
 -- For example:
 --
@@ -151,8 +158,8 @@ revQualData (QualData q) = QualData $ B.reverse q
 
 -- | The reverse complement function for 'Data.Bytestring.Char8' raw sequence
 -- data.
-revComp' :: B.ByteString
+addCompChar :: B.ByteString
          -> Char
          -> B.ByteString
-revComp' s c = B.cons (compChar c) s
+addCompChar s c = B.cons (compChar c) s
 
